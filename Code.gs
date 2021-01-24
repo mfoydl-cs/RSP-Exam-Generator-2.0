@@ -155,7 +155,7 @@ function validRow(row){
   return true;
 }
 function test(){
-  var row = ["P&P","1/28/2021","S4","Cheng, Joan","joan.cheng@stonybrook.edu","104","Zoa, Connie","connie.zao@@stonybrook.edu","","","","Test","test2","18","nalskdjflskjdf"];
+  var row = ["P&P","1/28/2021","S4","XXX","XXX","104","XXX","XXXX","","","","Test","test2","18","nalskdjflskjdf"];
   var row2 = parseDataRow(row);
   Logger.log(row2);
 }
