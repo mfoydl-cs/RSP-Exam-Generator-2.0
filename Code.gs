@@ -1,6 +1,23 @@
+/*
+    TO-DO:
+      - Confirm CREATED writing at completion of Task
+      - See if there's a better way to pass variables/abstract
+      - Try to remove any uncessary calls to sheets API
+      - Finish Documenting Code
+
+      - See if email/create could use any better reworks
+      - Rework the write to master list function!
+      
+      Future Ideas:
+         - write an archive function to keep the lists clean
+         - sepparate by semester?!
+
+*/
+
 function create_exams(){
-  var ss = SpreadsheetApp.getActiveSheet();
+
   
+  // -------------------------------------- KEEP THIS SECTION UP TO DATE ---------------------------------------------------------
  /********************************************************************************************************************************
                                                                                                                                 
    - This section declares all the ranges (locations) of data on the physical Google Sheet that are used in this script        
@@ -8,45 +25,62 @@ function create_exams(){
                                                                                                                                 
   ********************************************************************************************************************************/
   
-  var master_list_range = "Settings!G3";
-  var icq_list_range = "Settings!G4";
+  //Redo this to be similar to getting rows -- do for all the settings - less get ranges
 
+  var master_list_range = "Settings!I3"; //The position on the settings page containing the master list sheetID
+  var icq_list_range = "Settings!I4"; //The position on the settings page containing the master list sheetID 
   var generator_range = "A5:O";
+
+  var tableStartRow = 5; //The number of the first row for input values on the main table
+
+/********************************************************************************************************************************* 
+********************************************************************************************************************************* */ 
+
   
+
+  var ss = SpreadsheetApp.getActiveSheet(); //Gets the main spreadsheet for reference
+
   //Get the Master Exam List spreadsheet from the value (spreadsheetID) in 'master_list_range'
   var examMaster = SpreadsheetApp.openById(ss.getRange(master_list_range).getValue()); 
 
   //Get the ICQ Exam List spreadsheet from the value (spreadsheetID) in 'icq_list_range'
   var icqMaster = SpreadsheetApp.openById(ss.getRange(icq_list_range).getValue());
   
-  //var root_folder = DriveApp.getFolderById(ss.getRange("C7").getValue()); //Root Folder for current SiT Exam Folders
-  
-  
-  //var startRow = 9;
-  //var numRows= ss.getLastRow()-startRow;
-  //var numCols= 11;
-  //var range = ss.getRange("A9:N28"); //The feasible range that values could be placed
 
-  var data = ss.getRange(generator_range).getValues();
+  var data = ss.getRange(generator_range).getValues();//Read all the data from generator range
   
-  for (var i = 0; i < numRows ; i++){
+  //Loops through each row in data, generating the exam and sending the emails
+  for (var i = 0; i < data.length ; i++){
     var row = parseDataRow(data[i]);
     if(validRow(row)){
-      createExamSpreadsheet(row,examMaster,icqMaster);
-      sendEmails(row);
+      createExamSpreadsheet(row,examMaster,icqMaster,ss,i+tableStartRow);
+      sendEmails(row,ss,i+tableStartRow);
     }
     
-    }
+  }
 }
+
+
+
 /*
   This function turns a row of data from the 'Generator' Page of the spreadsheet, into an object for the rest of the script to use
   This will make it so that if the columns are changed on the spreadsheet, the only thing that needs to be changed is the columns array
 */
 function parseDataRow(row){
-  //Please have this array replicated the exact order of every column in the 'Generator' main sheet
+  // -------------------------------------- KEEP THIS SECTION UP TO DATE ---------------------------------------------------------
+ /********************************************************************************************************************************
+                                                                                                                                
+   - This section lists the orders of all values in the spreadsheet!! The values listed are the variable names used in the 
+      program to represent each column in the data table.        
+                                                                                                                                
+  ********************************************************************************************************************************/
+  //Please have this array replicate the exact order of every column in the 'Generator' main sheet!!!!!
   var columns = ["exam","date","examineeNum","examineeName","examineeEmail",
                   "examinerNum","examinerName","examinerEmail","examineeEmailSent",
                   "examinerEmailSent","created","pr","examFolder","inforow","examId"];
+
+  /********************************************************************************************************************************* 
+**********************************************************************************************************************************/
 
   var row_object = {};
 
@@ -62,9 +96,11 @@ function parseDataRow(row){
     - row: the data object for the current exam row being created
     - examMaster: the spreadsheet containing all the links to exams
     - icqMaster: the spreadsheet containing all the links to ICQ exams
+    - i: the row number on the spreadsheet
 */
-function createExamSpreadsheet(row,examMaster,icqMaster){
+function createExamSpreadsheet(row,examMaster,icqMaster,ss,i){
   var folder= null;
+  var createdColumn = 11;
   if(row.created!="DONE"){
     //Create exam folder if it doesn't already exist
     if(row.folder==""){
@@ -72,7 +108,6 @@ function createExamSpreadsheet(row,examMaster,icqMaster){
       var id = newFolder.getId();
       SpreadsheetApp.getActiveSpreadsheet().getSheetByName("SiT Information").getRange(row.inforow, 5).setValue(id);
       folder = newFolder;
-      //data[i][12]=id;
     }
     else{
       folder = DriveApp.getFolderById(row.folder);
@@ -84,16 +119,20 @@ function createExamSpreadsheet(row,examMaster,icqMaster){
     examRubric.addEditor(row.examinerEmail); //Add edit accesss for examiner
     examRubric.setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.VIEW); //Allow View-only access with link sharing
     
-    var masterSheet = examMaster.getSheetByName("All Exams");
+    var masterSheet = Null;
 
-    if (row.exam == "ICQ"){
+    if(row.exam == "ICQ"){
       masterSheet = icqMaster.getSheetByName("All Exams");
+    }
+    else{
+      masterSheet = examMaster.getSheetByName("All Exams");
     }
 
     writeToMasterList(row,masterSheet);
     
+    ss.getRange(i,createdColumn).setValue("DONE");
   }
-  //created.setValue("DONE");
+
 }
 
 /*
@@ -115,30 +154,42 @@ function writeToMasterList(row,masterSheet){
   Function responsible for sending the emails to the examiner/examinee
     - row: the data object for the current exam row being created
 */
-function sendEmails(row){
+function sendEmails(row,ss,i){
   var dc = "Miles Foydl (120)"
+  var examinerEmailColumn = 10;
+  var examineeEmailColumn = 9;
   //Message for examinee
-      var message = "<p>Your <b>"+row.exam+"</b> exam has been scheduled for <b>"+row.date+"</b> with "+row.examinerNum+".</p>"+ "<p>\n\nIf you have any questions and/or concerns, please reach out to me</p> <p>\n\nThank You,<br/>\n"+dc+"</p>";
-      var msgPlain = message.replace(/(<([^>]+)>)/ig, ""); // clear html tags for plain mail
-      var subject = "RSP "+row.exam+" Exam";
 
-      if(row.sent1!="SENT"){
-        MailApp.sendEmail(row.examineeEmail, subject,msgPlain,{ htmlBody: message });
-        //sent1.setValue("SENT");
-      }
-      //Message for examiner
-      var message2 = "<p>A <b>"+row.exam+"</b> exam has been scheduled for <b>"+row.date+"</b> with "+row.examineeNum+".</p>"+
-                     "<p>\n\nThe exam rubric has been shared with you via google drive.</p>"+
-                     "<p>\n\nIf you have any questions and/or concerns, please reach out to me.</p>"+
-                       "<p>\n\nThank You,\n<br/>"+dc+"</p>"+"";
-                     //'<p><img src="https://media.giphy.com/media/pt0EKLDJmVvlS/giphy.gif"></p>';
-      var msg2Plain = message2.replace(/(<([^>]+)>)/ig, ""); // clear html tags for plain mail
-      
-      if(row.sent2!="SENT"){
-        MailApp.sendEmail(row.examinerEmail,subject,msg2Plain,{ htmlBody: message2 });
-        //sent2.setValue("SENT");
-      }
+  var message = `<p>Your <b>${row.exam} Exam</b>  has been scheduled for <b>${row.date}</b> with <b>${row.examinerNum}</b>.</p>`+
+                `<p>\n\nIf you have any questions and/or concerns, please reach out to me</p>`+
+                `<p>\n\nThank you,<br\>\n${dc}</p>`;
+
+  var msgPlain = message.replace(/(<([^>]+)>)/ig, ""); // clear html tags for plain mail
+  var subject = "RSP "+row.exam+" Exam";
+
+  if(row.examineeEmailSent!="SENT"){
+    MailApp.sendEmail(row.examineeEmail, subject,msgPlain,{ htmlBody: message });
+    ss.getRange(i,examineeEmailColumn).setValue("SENT");
+  }
+  //Message for examiner
+  var message2 = `<p>A <b>${row.exam} Exam</b>  has been scheduled for <b>${row.date}</b> with <b>${row.examineeNum}</b>.</p>`+
+                    `<p>\n\nThe exam rubric has been shared with you via Google Drive.</p>`+
+                    `<p>\n\nIf you have any questions and/or converns, please reach out to me.</p>`+
+                    `<p>\n\nThank you,\n<br/>${dc}</p>`;
+                  //'<p><img src="https://media.giphy.com/media/pt0EKLDJmVvlS/giphy.gif"></p>';
+
+  var msg2Plain = message2.replace(/(<([^>]+)>)/ig, ""); // clear html tags for plain mail
+
+  if(row.examinerEmailSent!="SENT"){
+    MailApp.sendEmail(row.examinerEmail,subject,msg2Plain,{ htmlBody: message2 });
+    ss.getRange(i,examinerEmailColumn).setValue("SENT");
+  }
 }
+
+/*
+  Function is responsible for checking that a data row is valid before processing it
+    - row: the data object for the current exam row being created
+*/
 function validRow(row){
   if(row.exam==""){
     return false;
@@ -154,8 +205,10 @@ function validRow(row){
   }
   return true;
 }
+
+
 function test(){
-  var row = ["P&P","1/28/2021","S4","XXX","XXX","104","XXX","XXXX","","","","Test","test2","18","nalskdjflskjdf"];
+  var row = ["P&P","1/28/2021","S4","xxx","xxx","104","xxx","xxx","","","","Test","test2","18","nalskdjflskjdf"];
   var row2 = parseDataRow(row);
   Logger.log(row2);
 }
